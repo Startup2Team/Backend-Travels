@@ -240,17 +240,13 @@ func BuildCareerStatusChangeEmail(name, position, status string) (html string, s
 		headline = "Interview Scheduled 📅"
 		bannerBg = "#2563eb"
 		bodyText = fmt.Sprintf("Great news! Your application for the <strong>%s</strong> position at Rides has advanced to the interview phase. Our HR team will reach out to schedule your interview session.", position)
-	case "UNDER_REVIEW":
-		subject = fmt.Sprintf("Application Under Review — %s at Rides", position)
-		headline = "Application Under Review 🔍"
-		bannerBg = "#f59e0b"
-		bodyText = fmt.Sprintf("Your application for the <strong>%s</strong> position is currently being actively reviewed by our engineering and hiring team.", position)
 	case "REJECTED":
 		subject = fmt.Sprintf("Application Status Update — %s at Rides", position)
 		headline = "Application Update"
 		bannerBg = "#6b7280"
 		bodyText = fmt.Sprintf("Thank you for taking the time to apply for the <strong>%s</strong> position at Rides. After careful consideration, we have decided to proceed with other candidates whose qualifications more closely match our current requirements. We sincerely appreciate your interest and wish you the best in your career search.", position)
 	default:
+		// No email sent for UNDER_REVIEW or unmapped status changes
 		return "", ""
 	}
 
