@@ -61,7 +61,26 @@ func (s *Service) Get(ctx context.Context, id string) (*Application, error) {
 }
 
 func (s *Service) UpdateStatus(ctx context.Context, id, status string, notes *string, reviewerID string) (*Application, error) {
-	return s.repo.UpdateStatus(ctx, id, status, notes, reviewerID)
+	app, err := s.repo.UpdateStatus(ctx, id, status, notes, reviewerID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Send automated status update email asynchronously to candidate's personal email
+	if app != nil {
+		go func(candidateName, candidateEmail, position, newStatus string) {
+			html, subject := email.BuildCareerStatusChangeEmail(candidateName, position, newStatus)
+			if html != "" {
+				if err := email.SendEmail(context.Background(), candidateEmail, subject, html); err != nil {
+					s.log.Warn().Err(err).Str("email", candidateEmail).Str("status", newStatus).Msg("careers: failed to send status change email")
+				} else {
+					s.log.Info().Str("email", candidateEmail).Str("status", newStatus).Msg("careers: candidate status change email sent successfully")
+				}
+			}
+		}(app.FullName, app.Email, app.Position, app.ApplicationStatus)
+	}
+
+	return app, nil
 }
 
 func (s *Service) ExportCSV(ctx context.Context, filter ListFilter) ([]byte, error) {

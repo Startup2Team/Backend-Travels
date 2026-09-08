@@ -226,3 +226,73 @@ func BuildCareerApplicationReceivedEmail(name, position string) string {
 	)
 	return r.Replace(tpl)
 }
+
+func BuildCareerStatusChangeEmail(name, position, status string) (html string, subject string) {
+	var headline, bodyText, bannerBg string
+	switch status {
+	case "ACCEPTED":
+		subject = fmt.Sprintf("Congratulations! Application Accepted — %s at Rides", position)
+		headline = "Application Accepted 🎉"
+		bannerBg = "#10b981"
+		bodyText = fmt.Sprintf("We are thrilled to inform you that your application for the <strong>%s</strong> position at Rides has been <strong>Accepted</strong>! Our team will contact you shortly with the official offer details and onboarding instructions.", position)
+	case "INTERVIEW_SCHEDULED":
+		subject = fmt.Sprintf("Interview Invitation — %s at Rides", position)
+		headline = "Interview Scheduled 📅"
+		bannerBg = "#2563eb"
+		bodyText = fmt.Sprintf("Great news! Your application for the <strong>%s</strong> position at Rides has advanced to the interview phase. Our HR team will reach out to schedule your interview session.", position)
+	case "UNDER_REVIEW":
+		subject = fmt.Sprintf("Application Under Review — %s at Rides", position)
+		headline = "Application Under Review 🔍"
+		bannerBg = "#f59e0b"
+		bodyText = fmt.Sprintf("Your application for the <strong>%s</strong> position is currently being actively reviewed by our engineering and hiring team.", position)
+	case "REJECTED":
+		subject = fmt.Sprintf("Application Status Update — %s at Rides", position)
+		headline = "Application Update"
+		bannerBg = "#6b7280"
+		bodyText = fmt.Sprintf("Thank you for taking the time to apply for the <strong>%s</strong> position at Rides. After careful consideration, we have decided to proceed with other candidates whose qualifications more closely match our current requirements. We sincerely appreciate your interest and wish you the best in your career search.", position)
+	default:
+		return "", ""
+	}
+
+	tpl := `<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #1f2937; background-color: #f9fafb; margin: 0; padding: 0; }
+    .container { max-width: 600px; margin: 40px auto; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
+    .header { background: {{BannerBg}}; padding: 32px; text-align: center; color: white; }
+    .header h1 { margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.025em; }
+    .content { padding: 40px; }
+    .welcome-text { font-size: 16px; line-height: 1.6; color: #4b5563; }
+    .footer { padding: 32px; border-top: 1px solid #e5e7eb; text-align: center; font-size: 12px; color: #9ca3af; background: #f9fafb; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>{{Headline}}</h1>
+    </div>
+    <div class="content">
+      <p class="welcome-text">Hello {{Name}},</p>
+      <p class="welcome-text">{{BodyText}}</p>
+      <p class="welcome-text" style="margin-top: 32px;">
+        Best regards,<br>
+        <strong>Rides Recruitment Team</strong>
+      </p>
+    </div>
+    <div class="footer">
+      &copy; {{Year}} Rides. All rights reserved.
+    </div>
+  </div>
+</body>
+</html>`
+
+	r := strings.NewReplacer(
+		"{{Headline}}", headline,
+		"{{BannerBg}}", bannerBg,
+		"{{Name}}", name,
+		"{{BodyText}}", bodyText,
+		"{{Year}}", fmt.Sprintf("%d", time.Now().Year()),
+	)
+	return r.Replace(tpl), subject
+}
