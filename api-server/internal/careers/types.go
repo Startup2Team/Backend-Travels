@@ -67,3 +67,21 @@ type ListFilter struct {
 	Limit             int
 	Offset            int
 }
+
+type CareerSettings struct {
+	IsOpen          bool       `json:"is_open"`
+	MaxApplications int        `json:"max_applications"`
+	TotalSubmitted  int        `json:"total_submitted"`
+	OpenAt          *time.Time `json:"open_at,omitempty"`
+	CloseAt         *time.Time `json:"close_at,omitempty"`
+	ClosedMessage   string     `json:"closed_message"`
+	UpdatedAt       time.Time  `json:"updated_at"`
+}
+
+type UpdateSettingsInput struct {
+	IsOpen          *bool   `json:"is_open"`
+	MaxApplications *int    `json:"max_applications"`
+	OpenAt          *string `json:"open_at"`
+	CloseAt         *string `json:"close_at"`
+	ClosedMessage   *string `json:"closed_message"`
+}

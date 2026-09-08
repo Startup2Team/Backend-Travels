@@ -836,6 +836,7 @@ func main() {
 	).Post(apiV1Prefix+"/waitlist", waitlistH.Submit)
 
 	// ── Public recruitment & internship application form ─────────────────────
+	r.Get(apiV1Prefix+"/careers/config", careerH.GetSettings)
 	r.With(
 		mw.IPRateLimit(cfg, rdb, "careers_submit", 10, time.Hour),
 	).Post(apiV1Prefix+"/careers", careerH.Submit)
@@ -1346,6 +1347,8 @@ func main() {
 
 			// Careers & Internship Applications
 			r.Get("/careers", careerH.AdminList)
+			r.Get("/careers/settings", careerH.GetSettings)
+			r.Put("/careers/settings", careerH.AdminUpdateSettings)
 			r.Get("/careers/export", careerH.AdminExportCSV)
 			r.Get("/careers/{id}", careerH.AdminGet)
 			r.Patch("/careers/{id}/status", careerH.AdminUpdateStatus)

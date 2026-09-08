@@ -44,7 +44,28 @@ func parseFlexTime(s string) (time.Time, error) {
 func (s *Service) checkLimits(ctx context.Context) error {
 	now := time.Now().UTC()
 
-	// 1. Time Window Check (CAREERS_OPEN_AT & CAREERS_CLOSE_AT)
+	// 1. Check Dynamic DB Settings
+	settings, err := s.repo.GetSettings(ctx)
+	if err == nil && settings != nil {
+		if !settings.IsOpen {
+			msg := settings.ClosedMessage
+			if msg == "" {
+				msg = "Applications for this recruitment cycle are currently closed."
+			}
+			return apperrors.New(http.StatusBadRequest, "APPLICATIONS_CLOSED", msg)
+		}
+		if settings.OpenAt != nil && now.Before(*settings.OpenAt) {
+			return apperrors.New(http.StatusBadRequest, "APPLICATIONS_NOT_OPEN", fmt.Sprintf("Applications are not open yet. Application period starts on %s.", settings.OpenAt.Format("2006-01-02 15:04 UTC")))
+		}
+		if settings.CloseAt != nil && now.After(*settings.CloseAt) {
+			return apperrors.New(http.StatusBadRequest, "APPLICATIONS_CLOSED", "Applications for this recruitment cycle have closed.")
+		}
+		if settings.MaxApplications > 0 && settings.TotalSubmitted >= settings.MaxApplications {
+			return apperrors.New(http.StatusBadRequest, "QUOTA_REACHED", fmt.Sprintf("Application quota reached (%d/%d max submissions). Submissions are closed for this cycle.", settings.TotalSubmitted, settings.MaxApplications))
+		}
+	}
+
+	// 2. Env Var Fallbacks
 	openAtStr := os.Getenv("CAREERS_OPEN_AT")
 	if openAtStr != "" {
 		if openAt, err := parseFlexTime(openAtStr); err == nil && now.Before(openAt) {
@@ -59,7 +80,6 @@ func (s *Service) checkLimits(ctx context.Context) error {
 		}
 	}
 
-	// 2. Max Total Applications Quota Check (CAREERS_MAX_APPLICATIONS)
 	maxAppsStr := os.Getenv("CAREERS_MAX_APPLICATIONS")
 	if maxAppsStr != "" {
 		var maxApps int
@@ -72,6 +92,14 @@ func (s *Service) checkLimits(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (s *Service) GetSettings(ctx context.Context) (*CareerSettings, error) {
+	return s.repo.GetSettings(ctx)
+}
+
+func (s *Service) UpdateSettings(ctx context.Context, input UpdateSettingsInput) (*CareerSettings, error) {
+	return s.repo.UpdateSettings(ctx, input)
 }
 
 func (s *Service) Submit(ctx context.Context, input CreateApplicationInput) (*Application, error) {

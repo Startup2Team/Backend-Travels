@@ -3,6 +3,8 @@ package careers
 import (
 	"context"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -212,4 +214,92 @@ func (r *Repository) CountTotal(ctx context.Context) (int, error) {
 		return 0, fmt.Errorf("career repository count total: %w", err)
 	}
 	return count, nil
+}
+
+func (r *Repository) GetSettings(ctx context.Context) (*CareerSettings, error) {
+	query := `
+		SELECT is_open, max_applications, open_at, close_at, closed_message, updated_at
+		FROM career_settings
+		WHERE id = 1
+	`
+	s := &CareerSettings{}
+	err := r.db.QueryRow(ctx, query).Scan(
+		&s.IsOpen, &s.MaxApplications, &s.OpenAt, &s.CloseAt, &s.ClosedMessage, &s.UpdatedAt,
+	)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			s.IsOpen = true
+			s.MaxApplications = 0
+			s.ClosedMessage = "Applications for this recruitment cycle are currently closed."
+			s.UpdatedAt = time.Now()
+		} else {
+			return nil, fmt.Errorf("career repository get settings: %w", err)
+		}
+	}
+
+	count, _ := r.CountTotal(ctx)
+	s.TotalSubmitted = count
+
+	return s, nil
+}
+
+func (r *Repository) UpdateSettings(ctx context.Context, input UpdateSettingsInput) (*CareerSettings, error) {
+	current, err := r.GetSettings(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if input.IsOpen != nil {
+		current.IsOpen = *input.IsOpen
+	}
+	if input.MaxApplications != nil {
+		current.MaxApplications = *input.MaxApplications
+	}
+	if input.ClosedMessage != nil && strings.TrimSpace(*input.ClosedMessage) != "" {
+		current.ClosedMessage = strings.TrimSpace(*input.ClosedMessage)
+	}
+
+	if input.OpenAt != nil {
+		if *input.OpenAt == "" {
+			current.OpenAt = nil
+		} else if t, err := parseFlexTime(*input.OpenAt); err == nil {
+			current.OpenAt = &t
+		}
+	}
+
+	if input.CloseAt != nil {
+		if *input.CloseAt == "" {
+			current.CloseAt = nil
+		} else if t, err := parseFlexTime(*input.CloseAt); err == nil {
+			current.CloseAt = &t
+		}
+	}
+
+	query := `
+		INSERT INTO career_settings (id, is_open, max_applications, open_at, close_at, closed_message, updated_at)
+		VALUES (1, $1, $2, $3, $4, $5, NOW())
+		ON CONFLICT (id) DO UPDATE SET
+			is_open = EXCLUDED.is_open,
+			max_applications = EXCLUDED.max_applications,
+			open_at = EXCLUDED.open_at,
+			close_at = EXCLUDED.close_at,
+			closed_message = EXCLUDED.closed_message,
+			updated_at = NOW()
+		RETURNING is_open, max_applications, open_at, close_at, closed_message, updated_at
+	`
+
+	s := &CareerSettings{}
+	err = r.db.QueryRow(ctx, query,
+		current.IsOpen, current.MaxApplications, current.OpenAt, current.CloseAt, current.ClosedMessage,
+	).Scan(
+		&s.IsOpen, &s.MaxApplications, &s.OpenAt, &s.CloseAt, &s.ClosedMessage, &s.UpdatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("career repository update settings: %w", err)
+	}
+
+	count, _ := r.CountTotal(ctx)
+	s.TotalSubmitted = count
+
+	return s, nil
 }

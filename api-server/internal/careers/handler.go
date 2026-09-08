@@ -137,3 +137,30 @@ func (h *Handler) AdminExportCSV(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(csvBytes)
 }
+
+// GET /api/v1/careers/config (Public & Admin configuration check)
+func (h *Handler) GetSettings(w http.ResponseWriter, r *http.Request) {
+	settings, err := h.svc.GetSettings(r.Context())
+	if err != nil {
+		respond.Error(w, err)
+		return
+	}
+	respond.OK(w, settings)
+}
+
+// PUT /api/v1/admin/careers/settings (Admin update settings)
+func (h *Handler) AdminUpdateSettings(w http.ResponseWriter, r *http.Request) {
+	var input UpdateSettingsInput
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		respond.Error(w, apperrors.ErrBadRequest)
+		return
+	}
+
+	settings, err := h.svc.UpdateSettings(r.Context(), input)
+	if err != nil {
+		respond.Error(w, err)
+		return
+	}
+
+	respond.OK(w, settings)
+}
