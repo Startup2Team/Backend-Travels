@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/rs/zerolog"
+	"github.com/workspace/ride-platform/internal/email"
 )
 
 type Service struct {
@@ -36,6 +37,17 @@ func (s *Service) Submit(ctx context.Context, input CreateApplicationInput) (*Ap
 		Str("position", app.Position).
 		Str("email", app.Email).
 		Msg("careers: new candidate application received")
+
+	// Send automated confirmation email asynchronously to applicant's personal email
+	go func(candidateName, candidateEmail, position string) {
+		html := email.BuildCareerApplicationReceivedEmail(candidateName, position)
+		subject := fmt.Sprintf("Application Received — %s Position at Rides", position)
+		if err := email.SendEmail(context.Background(), candidateEmail, subject, html); err != nil {
+			s.log.Warn().Err(err).Str("email", candidateEmail).Msg("careers: failed to send application confirmation email")
+		} else {
+			s.log.Info().Str("email", candidateEmail).Msg("careers: application confirmation email sent successfully")
+		}
+	}(app.FullName, app.Email, app.Position)
 
 	return app, nil
 }
