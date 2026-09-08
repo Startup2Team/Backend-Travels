@@ -34,6 +34,7 @@ import (
 	"github.com/workspace/ride-platform/internal/analytics"
 	"github.com/workspace/ride-platform/internal/auth"
 	"github.com/workspace/ride-platform/internal/bonus"
+	"github.com/workspace/ride-platform/internal/careers"
 	"github.com/workspace/ride-platform/internal/customer"
 	"github.com/workspace/ride-platform/internal/dashboard"
 	"github.com/workspace/ride-platform/internal/digest"
@@ -438,6 +439,9 @@ func main() {
 	teamH := team.NewHandler(teamSvc, auditLog)
 	dashH := dashboard.NewHandler(dashSvc)
 	monetizationH := monetization.NewHandler(monetizationSvc, auditLog)
+	careerRepo := careers.NewRepository(db)
+	careerSvc := careers.NewService(careerRepo, log)
+	careerH := careers.NewHandler(careerSvc)
 
 	// ── Background goroutines ─────────────────────────────────────────────────
 	bgCtx, bgCancel := context.WithCancel(context.Background())
@@ -830,6 +834,12 @@ func main() {
 		mw.IPRateLimit(cfg, rdb, "waitlist", 20, time.Hour),
 		mw.PhoneRateLimit(rdb, "waitlist", "phone", 5, 24*time.Hour),
 	).Post(apiV1Prefix+"/waitlist", waitlistH.Submit)
+
+	// ── Public recruitment & internship application form ─────────────────────
+	r.With(
+		mw.IPRateLimit(cfg, rdb, "careers_submit", 10, time.Hour),
+	).Post(apiV1Prefix+"/careers", careerH.Submit)
+
 	r.Get(apiV1Prefix+"/media/documents/{filename}", adminH.ServeDriverMedia)
 
 	// ── Public auth ───────────────────────────────────────────────────────────
@@ -1333,6 +1343,12 @@ func main() {
 
 			// Waitlist (pre-launch signups)
 			r.Get("/waitlist", waitlistH.List)
+
+			// Careers & Internship Applications
+			r.Get("/careers", careerH.AdminList)
+			r.Get("/careers/export", careerH.AdminExportCSV)
+			r.Get("/careers/{id}", careerH.AdminGet)
+			r.Patch("/careers/{id}/status", careerH.AdminUpdateStatus)
 
 			// Account Assist tools (clear OTP lockouts, clear GPS flags, etc.)
 			r.Post("/customers/{id}/clear-otp-lockout", adminH.ClearOTPLockout)

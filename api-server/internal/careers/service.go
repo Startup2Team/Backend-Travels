@@ -1,0 +1,115 @@
+package careers
+
+import (
+	"context"
+	"fmt"
+	"strings"
+
+	"github.com/rs/zerolog"
+)
+
+type Service struct {
+	repo *Repository
+	log  zerolog.Logger
+}
+
+func NewService(repo *Repository, log zerolog.Logger) *Service {
+	return &Service{
+		repo: repo,
+		log:  log,
+	}
+}
+
+func (s *Service) Submit(ctx context.Context, input CreateApplicationInput) (*Application, error) {
+	input.Email = strings.ToLower(strings.TrimSpace(input.Email))
+	input.FullName = strings.TrimSpace(input.FullName)
+	input.Phone = strings.TrimSpace(input.Phone)
+
+	app, err := s.repo.Create(ctx, input)
+	if err != nil {
+		s.log.Error().Err(err).Str("email", input.Email).Msg("careers: failed to save application")
+		return nil, err
+	}
+
+	s.log.Info().
+		Str("application_id", app.ID).
+		Str("position", app.Position).
+		Str("email", app.Email).
+		Msg("careers: new candidate application received")
+
+	return app, nil
+}
+
+func (s *Service) List(ctx context.Context, filter ListFilter) ([]*Application, int, error) {
+	return s.repo.List(ctx, filter)
+}
+
+func (s *Service) Get(ctx context.Context, id string) (*Application, error) {
+	return s.repo.GetByID(ctx, id)
+}
+
+func (s *Service) UpdateStatus(ctx context.Context, id, status string, notes *string, reviewerID string) (*Application, error) {
+	return s.repo.UpdateStatus(ctx, id, status, notes, reviewerID)
+}
+
+func (s *Service) ExportCSV(ctx context.Context, filter ListFilter) ([]byte, error) {
+	filter.Limit = 10000 // Fetch all matching records for CSV export
+	apps, _, err := s.repo.List(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+
+	var sb strings.Builder
+	// CSV Header
+	sb.WriteString("ID,Submitted At,Full Name,Email,Phone,City,Position,Status,Work Right,Institution,Graduation Year,Technologies,GitHub,LinkedIn,Portfolio,CV URL,App Status,Reviewer Notes\n")
+
+	for _, app := range apps {
+		institution := ""
+		if app.Institution != nil {
+			institution = *app.Institution
+		}
+		gradYear := ""
+		if app.GraduationYear != nil {
+			gradYear = *app.GraduationYear
+		}
+		linkedin := ""
+		if app.LinkedinURL != nil {
+			linkedin = *app.LinkedinURL
+		}
+		portfolio := ""
+		if app.PortfolioURL != nil {
+			portfolio = *app.PortfolioURL
+		}
+		cv := ""
+		if app.CVURL != nil {
+			cv = *app.CVURL
+		}
+		notes := ""
+		if app.ReviewerNotes != nil {
+			notes = *app.ReviewerNotes
+		}
+
+		sb.WriteString(fmt.Sprintf("%q,%q,%q,%q,%q,%q,%q,%q,%q,%q,%q,%q,%q,%q,%q,%q,%q,%q\n",
+			app.ID,
+			app.CreatedAt.Format("2006-01-02 15:04:05"),
+			app.FullName,
+			app.Email,
+			app.Phone,
+			app.City,
+			app.Position,
+			app.Status,
+			app.WorkRight,
+			institution,
+			gradYear,
+			app.Technologies,
+			app.GithubURL,
+			linkedin,
+			portfolio,
+			cv,
+			app.ApplicationStatus,
+			notes,
+		))
+	}
+
+	return []byte(sb.String()), nil
+}
