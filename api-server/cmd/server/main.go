@@ -858,8 +858,11 @@ func main() {
 		momoWebhookAuth(cfg.Payments.WebhookSecret, webhookSecretRequired),
 	).Post(apiV1Prefix+"/webhooks/momo/callback", pkgH.WebhookMoMo)
 
-	// ── Customer Public Location Endpoint ──────────────────────────────────
-	r.Post(apiV1Prefix+"/customer/location", driver.NearbyDriversHandler(driverSvc))
+	// ── Customer Public Location Endpoint (Guest / Pre-login map view) ─────
+	// Rate-limited per IP (30 req/min) to prevent spatial scraping or DoS attacks.
+	r.With(
+		mw.IPRateLimit(cfg, rdb, "nearby_drivers_public", 30, time.Minute),
+	).Post(apiV1Prefix+"/customer/location", driver.NearbyDriversHandler(driverSvc))
 
 	// ── Customer ──────────────────────────────────────────────────────────────
 	r.Route(apiV1Prefix+"/customer", func(r chi.Router) {
