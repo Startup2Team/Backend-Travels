@@ -72,6 +72,8 @@ type CareerSettings struct {
 	IsOpen          bool       `json:"is_open"`
 	MaxApplications int        `json:"max_applications"`
 	TotalSubmitted  int        `json:"total_submitted"`
+	HeroTitle       string     `json:"hero_title"`
+	HeroSubtitle    string     `json:"hero_subtitle"`
 	OpenAt          *time.Time `json:"open_at,omitempty"`
 	CloseAt         *time.Time `json:"close_at,omitempty"`
 	ClosedMessage   string     `json:"closed_message"`
@@ -81,6 +83,8 @@ type CareerSettings struct {
 type UpdateSettingsInput struct {
 	IsOpen          *bool   `json:"is_open"`
 	MaxApplications *int    `json:"max_applications"`
+	HeroTitle       *string `json:"hero_title"`
+	HeroSubtitle    *string `json:"hero_subtitle"`
 	OpenAt          *string `json:"open_at"`
 	CloseAt         *string `json:"close_at"`
 	ClosedMessage   *string `json:"closed_message"`

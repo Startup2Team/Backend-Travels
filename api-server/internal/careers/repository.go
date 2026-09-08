@@ -218,19 +218,21 @@ func (r *Repository) CountTotal(ctx context.Context) (int, error) {
 
 func (r *Repository) GetSettings(ctx context.Context) (*CareerSettings, error) {
 	query := `
-		SELECT is_open, max_applications, open_at, close_at, closed_message, updated_at
+		SELECT is_open, max_applications, hero_title, hero_subtitle, open_at, close_at, closed_message, updated_at
 		FROM career_settings
 		WHERE id = 1
 	`
 	s := &CareerSettings{}
 	err := r.db.QueryRow(ctx, query).Scan(
-		&s.IsOpen, &s.MaxApplications, &s.OpenAt, &s.CloseAt, &s.ClosedMessage, &s.UpdatedAt,
+		&s.IsOpen, &s.MaxApplications, &s.HeroTitle, &s.HeroSubtitle, &s.OpenAt, &s.CloseAt, &s.ClosedMessage, &s.UpdatedAt,
 	)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			s.IsOpen = true
 			s.MaxApplications = 0
-			s.ClosedMessage = "Applications for this recruitment cycle are currently closed."
+			s.HeroTitle = "Join Our Engineering Team & Build the Future of Mobility"
+			s.HeroSubtitle = "We are looking for passionate software engineers and interns to solve real-world mobility challenges across Rwanda."
+			s.ClosedMessage = "Applications for our software engineering and internship programs are currently closed for this hiring cycle. Please check back for future openings!"
 			s.UpdatedAt = time.Now()
 		} else {
 			return nil, fmt.Errorf("career repository get settings: %w", err)
@@ -255,6 +257,12 @@ func (r *Repository) UpdateSettings(ctx context.Context, input UpdateSettingsInp
 	if input.MaxApplications != nil {
 		current.MaxApplications = *input.MaxApplications
 	}
+	if input.HeroTitle != nil && strings.TrimSpace(*input.HeroTitle) != "" {
+		current.HeroTitle = strings.TrimSpace(*input.HeroTitle)
+	}
+	if input.HeroSubtitle != nil && strings.TrimSpace(*input.HeroSubtitle) != "" {
+		current.HeroSubtitle = strings.TrimSpace(*input.HeroSubtitle)
+	}
 	if input.ClosedMessage != nil && strings.TrimSpace(*input.ClosedMessage) != "" {
 		current.ClosedMessage = strings.TrimSpace(*input.ClosedMessage)
 	}
@@ -276,23 +284,25 @@ func (r *Repository) UpdateSettings(ctx context.Context, input UpdateSettingsInp
 	}
 
 	query := `
-		INSERT INTO career_settings (id, is_open, max_applications, open_at, close_at, closed_message, updated_at)
-		VALUES (1, $1, $2, $3, $4, $5, NOW())
+		INSERT INTO career_settings (id, is_open, max_applications, hero_title, hero_subtitle, open_at, close_at, closed_message, updated_at)
+		VALUES (1, $1, $2, $3, $4, $5, $6, $7, NOW())
 		ON CONFLICT (id) DO UPDATE SET
 			is_open = EXCLUDED.is_open,
 			max_applications = EXCLUDED.max_applications,
+			hero_title = EXCLUDED.hero_title,
+			hero_subtitle = EXCLUDED.hero_subtitle,
 			open_at = EXCLUDED.open_at,
 			close_at = EXCLUDED.close_at,
 			closed_message = EXCLUDED.closed_message,
 			updated_at = NOW()
-		RETURNING is_open, max_applications, open_at, close_at, closed_message, updated_at
+		RETURNING is_open, max_applications, hero_title, hero_subtitle, open_at, close_at, closed_message, updated_at
 	`
 
 	s := &CareerSettings{}
 	err = r.db.QueryRow(ctx, query,
-		current.IsOpen, current.MaxApplications, current.OpenAt, current.CloseAt, current.ClosedMessage,
+		current.IsOpen, current.MaxApplications, current.HeroTitle, current.HeroSubtitle, current.OpenAt, current.CloseAt, current.ClosedMessage,
 	).Scan(
-		&s.IsOpen, &s.MaxApplications, &s.OpenAt, &s.CloseAt, &s.ClosedMessage, &s.UpdatedAt,
+		&s.IsOpen, &s.MaxApplications, &s.HeroTitle, &s.HeroSubtitle, &s.OpenAt, &s.CloseAt, &s.ClosedMessage, &s.UpdatedAt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("career repository update settings: %w", err)
