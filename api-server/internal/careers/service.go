@@ -3,10 +3,14 @@ package careers
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"os"
 	"strings"
+	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/workspace/ride-platform/internal/email"
+	apperrors "github.com/workspace/ride-platform/pkg/errors"
 )
 
 type Service struct {
@@ -21,7 +25,61 @@ func NewService(repo *Repository, log zerolog.Logger) *Service {
 	}
 }
 
+func parseFlexTime(s string) (time.Time, error) {
+	s = strings.TrimSpace(s)
+	formats := []string{
+		time.RFC3339,
+		"2006-01-02T15:04:05",
+		"2006-01-02 15:04:05",
+		"2006-01-02",
+	}
+	for _, f := range formats {
+		if t, err := time.Parse(f, s); err == nil {
+			return t.UTC(), nil
+		}
+	}
+	return time.Time{}, fmt.Errorf("unable to parse time: %s", s)
+}
+
+func (s *Service) checkLimits(ctx context.Context) error {
+	now := time.Now().UTC()
+
+	// 1. Time Window Check (CAREERS_OPEN_AT & CAREERS_CLOSE_AT)
+	openAtStr := os.Getenv("CAREERS_OPEN_AT")
+	if openAtStr != "" {
+		if openAt, err := parseFlexTime(openAtStr); err == nil && now.Before(openAt) {
+			return apperrors.New(http.StatusBadRequest, "APPLICATIONS_NOT_OPEN", fmt.Sprintf("Applications are not open yet. Application period starts on %s.", openAt.Format("2006-01-02 15:04 UTC")))
+		}
+	}
+
+	closeAtStr := os.Getenv("CAREERS_CLOSE_AT")
+	if closeAtStr != "" {
+		if closeAt, err := parseFlexTime(closeAtStr); err == nil && now.After(closeAt) {
+			return apperrors.New(http.StatusBadRequest, "APPLICATIONS_CLOSED", "Applications for this recruitment cycle have closed.")
+		}
+	}
+
+	// 2. Max Total Applications Quota Check (CAREERS_MAX_APPLICATIONS)
+	maxAppsStr := os.Getenv("CAREERS_MAX_APPLICATIONS")
+	if maxAppsStr != "" {
+		var maxApps int
+		if _, err := fmt.Sscanf(maxAppsStr, "%d", &maxApps); err == nil && maxApps > 0 {
+			currentCount, err := s.repo.CountTotal(ctx)
+			if err == nil && currentCount >= maxApps {
+				return apperrors.New(http.StatusBadRequest, "QUOTA_REACHED", fmt.Sprintf("Application quota reached (%d/%d max submissions). Submissions are closed for this cycle.", currentCount, maxApps))
+			}
+		}
+	}
+
+	return nil
+}
+
 func (s *Service) Submit(ctx context.Context, input CreateApplicationInput) (*Application, error) {
+	if err := s.checkLimits(ctx); err != nil {
+		s.log.Warn().Err(err).Str("email", input.Email).Msg("careers: application submission blocked by limit rules")
+		return nil, err
+	}
+
 	input.Email = strings.ToLower(strings.TrimSpace(input.Email))
 	input.FullName = strings.TrimSpace(input.FullName)
 	input.Phone = strings.TrimSpace(input.Phone)

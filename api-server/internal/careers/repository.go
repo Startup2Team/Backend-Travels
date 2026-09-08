@@ -204,3 +204,12 @@ func (r *Repository) UpdateStatus(ctx context.Context, id, status string, notes 
 	}
 	return app, nil
 }
+
+func (r *Repository) CountTotal(ctx context.Context) (int, error) {
+	var count int
+	err := r.db.QueryRow(ctx, `SELECT COUNT(*) FROM career_applications`).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("career repository count total: %w", err)
+	}
+	return count, nil
+}
