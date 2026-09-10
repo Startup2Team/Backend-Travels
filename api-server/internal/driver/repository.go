@@ -83,6 +83,8 @@ type Document struct {
 	// show each vehicle its own paperwork; before it existed a driver's second
 	// vehicle silently superseded the first vehicle's documents.
 	VehicleID *string `json:"vehicle_id,omitempty"`
+	// ReviewNotes holds any specific admin reviewer comment attached to a document rejection.
+	ReviewNotes *string `json:"review_notes,omitempty"`
 }
 
 // ErrDocumentLocked is returned when a driver tries to replace a document that
@@ -644,7 +646,8 @@ func (r *Repository) SetDocumentReview(ctx context.Context, documentID, status, 
 func (r *Repository) ListDocuments(ctx context.Context, driverProfileID string) ([]*Document, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT id, document_type, file_url, uploaded_at, review_status, sha256, vehicle_id,
-		       (review_status <> 'APPROVED' OR reupload_requested_at IS NOT NULL) AS editable
+		       (review_status <> 'APPROVED' OR reupload_requested_at IS NOT NULL) AS editable,
+		       review_notes
 		FROM driver_documents
 		WHERE driver_id = $1 AND superseded_at IS NULL
 		ORDER BY vehicle_id NULLS FIRST, uploaded_at ASC
@@ -658,7 +661,7 @@ func (r *Repository) ListDocuments(ctx context.Context, driverProfileID string) 
 	for rows.Next() {
 		d := &Document{}
 		if err := rows.Scan(&d.ID, &d.DocumentType, &d.FileURL, &d.UploadedAt,
-			&d.ReviewStatus, &d.SHA256, &d.VehicleID, &d.Editable); err != nil {
+			&d.ReviewStatus, &d.SHA256, &d.VehicleID, &d.Editable, &d.ReviewNotes); err != nil {
 			return nil, err
 		}
 		docs = append(docs, d)

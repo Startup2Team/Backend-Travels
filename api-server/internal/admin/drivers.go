@@ -286,6 +286,24 @@ func (s *Service) RequestDriverMoreInfo(ctx context.Context, profileID, adminUse
 			"driver is not in review or does not exist")
 	}
 
+	for _, d := range docs {
+		docType := strings.TrimSpace(d.DocumentType)
+		comment := strings.TrimSpace(d.Comment)
+		if docType == "" {
+			continue
+		}
+		_, _ = s.db.Exec(ctx, `
+			UPDATE driver_documents
+			SET review_status = 'REJECTED',
+			    review_notes = $1,
+			    reupload_requested_at = NOW(),
+			    reupload_requested_by = $2
+			WHERE driver_id = $3
+			  AND (document_type = $4 OR document_type = upper($4))
+			  AND superseded_at IS NULL
+		`, comment, adminUserID, profileID, docType)
+	}
+
 	if s.notifier != nil {
 		body := reason
 		for _, d := range docs {
