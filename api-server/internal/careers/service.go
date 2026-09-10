@@ -127,7 +127,7 @@ func (s *Service) Submit(ctx context.Context, input CreateApplicationInput) (*Ap
 	// Send automated confirmation email asynchronously to applicant's personal email
 	go func(candidateName, candidateEmail, position string) {
 		html := email.BuildCareerApplicationReceivedEmail(candidateName, position)
-		subject := fmt.Sprintf("Application Received — %s Position at Rides", position)
+		subject := fmt.Sprintf("Application Received — %s Position at Travelis Rwanda Ltd", position)
 		if err := email.SendEmail(context.Background(), candidateEmail, subject, html); err != nil {
 			s.log.Warn().Err(err).Str("email", candidateEmail).Msg("careers: failed to send application confirmation email")
 		} else {
