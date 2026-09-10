@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/websocket"
 	goredis "github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog"
@@ -64,6 +66,99 @@ func NewHandler(hub *Hub, driverSvc *driver.Service, rdb goredis.UniversalClient
 		cfg:       cfg,
 		log:       log,
 		upgrader:  upg,
+	}
+}
+
+// WS /ws/admin
+// Web Admin console connects here to receive real-time driver presence & fleet events.
+func (h *Handler) AdminWS(w http.ResponseWriter, r *http.Request) {
+	tokenStr := ""
+	if header := r.Header.Get("Authorization"); header != "" && strings.HasPrefix(header, "Bearer ") {
+		tokenStr = strings.TrimPrefix(header, "Bearer ")
+	} else if q := r.URL.Query().Get("ticket"); q != "" {
+		tokenStr = q
+	} else if q := r.URL.Query().Get("token"); q != "" {
+		tokenStr = q
+	}
+	if tokenStr == "" {
+		respond.Error(w, apperrors.ErrUnauthorized)
+		return
+	}
+
+	claims := &middleware.Claims{}
+	token, err := jwt.ParseWithClaims(tokenStr, claims, func(t *jwt.Token) (interface{}, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, apperrors.ErrTokenInvalid
+		}
+		return []byte(h.cfg.JWT.AdminAccessSecret), nil
+	})
+
+	if err != nil || !token.Valid || claims.AdminRole == "" {
+		respond.Error(w, apperrors.ErrForbidden)
+		return
+	}
+
+	if claims.ID != "" {
+		key := rkeys.K.Session(claims.UserID, claims.ID)
+		val, redisErr := h.redis.Get(r.Context(), key).Result()
+		if redisErr != nil || val != "valid" {
+			respond.Error(w, apperrors.ErrTokenRevoked)
+			return
+		}
+	}
+
+	conn, err := h.upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		h.log.Error().Err(err).Msg("ws: admin upgrade failed")
+		return
+	}
+	defer conn.Close()
+
+	adminID := "admin_" + claims.UserID
+	client := &Client{
+		UserID: adminID,
+		Role:   "ADMIN",
+		Send:   make(chan Message, 32),
+		done:   make(chan struct{}),
+	}
+
+	h.hub.RegisterAdmin(adminID, client)
+	defer func() {
+		client.Done()
+		h.hub.UnregisterAdmin(adminID)
+	}()
+
+	// Write pump — sends messages from hub to admin
+	go func() {
+		ticker := time.NewTicker(pingPeriod)
+		defer ticker.Stop()
+		for {
+			select {
+			case msg, ok := <-client.Send:
+				_ = conn.SetWriteDeadline(time.Now().Add(writeWait))
+				if !ok {
+					_ = conn.WriteMessage(websocket.CloseMessage, []byte{})
+					return
+				}
+				if err := conn.WriteJSON(msg); err != nil {
+					return
+				}
+			case <-ticker.C:
+				_ = conn.SetWriteDeadline(time.Now().Add(writeWait))
+				if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+					return
+				}
+			case <-client.done:
+				return
+			}
+		}
+	}()
+
+	// Read pump — keep connection alive
+	for {
+		if _, _, err := conn.ReadMessage(); err != nil {
+			break
+		}
 	}
 }
 

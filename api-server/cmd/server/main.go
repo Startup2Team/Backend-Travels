@@ -34,6 +34,7 @@ import (
 	"github.com/workspace/ride-platform/internal/analytics"
 	"github.com/workspace/ride-platform/internal/auth"
 	"github.com/workspace/ride-platform/internal/bonus"
+	"github.com/workspace/ride-platform/internal/careers"
 	"github.com/workspace/ride-platform/internal/customer"
 	"github.com/workspace/ride-platform/internal/dashboard"
 	"github.com/workspace/ride-platform/internal/digest"
@@ -363,6 +364,7 @@ func main() {
 	pkgH.SetBonus(bonusSvc)       // auto-grant purchase bonuses
 	pkgH.SetLedger(ledgerSvc)     // v4 entitlements
 	pkgH.SetPurchase(purchaseSvc) // v4 purchase + MoMo
+	pkgH.SetNotifier(hub)         // real-time WebSocket notifier for catalog updates
 	bonusH := bonus.NewHandler(bonusSvc)
 	walletH := wallet.NewHandler(walletSvc)
 	var uploadH *upload.Handler
@@ -374,6 +376,7 @@ func main() {
 		// Admin-uploaded driver documents go to the same bucket as mobile ones.
 		adminH.SetObjectStore(uh)
 	}
+	adminH.SetNotifier(hub)
 
 	// Daily operations digest + the /stats and /pending bot commands. Built
 	// here because it needs the upload handler for its storage health check.
@@ -436,6 +439,9 @@ func main() {
 	teamH := team.NewHandler(teamSvc, auditLog)
 	dashH := dashboard.NewHandler(dashSvc)
 	monetizationH := monetization.NewHandler(monetizationSvc, auditLog)
+	careerRepo := careers.NewRepository(db)
+	careerSvc := careers.NewService(careerRepo, log)
+	careerH := careers.NewHandler(careerSvc)
 
 	// ── Background goroutines ─────────────────────────────────────────────────
 	bgCtx, bgCancel := context.WithCancel(context.Background())
@@ -828,6 +834,13 @@ func main() {
 		mw.IPRateLimit(cfg, rdb, "waitlist", 20, time.Hour),
 		mw.PhoneRateLimit(rdb, "waitlist", "phone", 5, 24*time.Hour),
 	).Post(apiV1Prefix+"/waitlist", waitlistH.Submit)
+
+	// ── Public recruitment & internship application form ─────────────────────
+	r.Get(apiV1Prefix+"/careers/config", careerH.GetSettings)
+	r.With(
+		mw.IPRateLimit(cfg, rdb, "careers_submit", 10, time.Hour),
+	).Post(apiV1Prefix+"/careers", careerH.Submit)
+
 	r.Get(apiV1Prefix+"/media/documents/{filename}", adminH.ServeDriverMedia)
 
 	// ── Public auth ───────────────────────────────────────────────────────────
@@ -855,6 +868,12 @@ func main() {
 		mw.IPRateLimit(cfg, rdb, "momo_webhook", cfg.Security.MomoWebhookRateLimit, time.Minute),
 		momoWebhookAuth(cfg.Payments.WebhookSecret, webhookSecretRequired),
 	).Post(apiV1Prefix+"/webhooks/momo/callback", pkgH.WebhookMoMo)
+
+	// ── Customer Public Location Endpoint (Guest / Pre-login map view) ─────
+	// Rate-limited per IP (30 req/min) to prevent spatial scraping or DoS attacks.
+	r.With(
+		mw.IPRateLimit(cfg, rdb, "nearby_drivers_public", 30, time.Minute),
+	).Post(apiV1Prefix+"/customer/location", driver.NearbyDriversHandler(driverSvc))
 
 	// ── Customer ──────────────────────────────────────────────────────────────
 	r.Route(apiV1Prefix+"/customer", func(r chi.Router) {
@@ -985,6 +1004,8 @@ func main() {
 				Get("/demand-heatmap", driverH.DemandHeatmap)
 
 			r.Get("/packages", pkgH.ListPackages)
+			r.Get("/packages/catalog", pkgH.ListPackages)
+			r.Get("/packages/campaigns", pkgH.ListActiveCampaigns)
 			r.Get("/campaigns/active", pkgH.ListActiveCampaigns)
 			// Cap purchase attempts per driver so a loop can't spam MoMo prompts
 			// (each one pushes a PIN request to the payer's phone).
@@ -1027,6 +1048,14 @@ func main() {
 			r.Get("/earnings/weekly", driverH.WeeklyEarnings)
 			r.Get("/stats", driverH.Stats)
 		})
+	})
+
+	// ── Public Packages Catalog & Offers ──────────────────────────────────────
+	r.Route(apiV1Prefix+"/packages", func(r chi.Router) {
+		r.Get("/", pkgH.ListPackages)
+		r.Get("/catalog", pkgH.ListPackages)
+		r.Get("/campaigns", pkgH.ListActiveCampaigns)
+		r.Get("/offers", pkgH.ListPackages)
 	})
 
 	// ── Users (mode switch, saved locations, notifications) ──────────────────
@@ -1316,6 +1345,14 @@ func main() {
 			// Waitlist (pre-launch signups)
 			r.Get("/waitlist", waitlistH.List)
 
+			// Careers & Internship Applications
+			r.Get("/careers", careerH.AdminList)
+			r.Get("/careers/settings", careerH.GetSettings)
+			r.Put("/careers/settings", careerH.AdminUpdateSettings)
+			r.Get("/careers/export", careerH.AdminExportCSV)
+			r.Get("/careers/{id}", careerH.AdminGet)
+			r.Patch("/careers/{id}/status", careerH.AdminUpdateStatus)
+
 			// Account Assist tools (clear OTP lockouts, clear GPS flags, etc.)
 			r.Post("/customers/{id}/clear-otp-lockout", adminH.ClearOTPLockout)
 			r.Post("/drivers/{id}/clear-gps-flags", adminH.ClearGPSFlags)
@@ -1529,9 +1566,12 @@ func main() {
 	// Mobile uses EXPO_PUBLIC_WS_BASE_URL = ws://host/api/v1, so paths must be
 	// /api/v1/ws/driver and /api/v1/ws/customer.
 	r.Route(apiV1Prefix+"/ws", func(r chi.Router) {
-		r.Use(mw.Authenticate(cfg, rdb))
-		r.Get("/driver", trackH.DriverWS)
-		r.Get("/customer", trackH.CustomerWS)
+		r.Get("/admin", trackH.AdminWS)
+		r.Group(func(r chi.Router) {
+			r.Use(mw.Authenticate(cfg, rdb))
+			r.Get("/driver", trackH.DriverWS)
+			r.Get("/customer", trackH.CustomerWS)
+		})
 	})
 
 	// Wire matching engine into ride service
