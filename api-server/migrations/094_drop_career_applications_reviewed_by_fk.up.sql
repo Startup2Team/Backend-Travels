@@ -1,0 +1,1 @@
+ALTER TABLE career_applications DROP CONSTRAINT IF EXISTS career_applications_reviewed_by_fkey;

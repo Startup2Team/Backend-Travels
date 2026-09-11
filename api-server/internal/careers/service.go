@@ -146,16 +146,20 @@ func (s *Service) Get(ctx context.Context, id string) (*Application, error) {
 	return s.repo.GetByID(ctx, id)
 }
 
-func (s *Service) UpdateStatus(ctx context.Context, id, status string, notes *string, reviewerID string) (*Application, error) {
-	app, err := s.repo.UpdateStatus(ctx, id, status, notes, reviewerID)
+func (s *Service) UpdateStatus(ctx context.Context, id, status string, notes *string, interviewAt *string, reviewerID string) (*Application, error) {
+	app, err := s.repo.UpdateStatus(ctx, id, status, notes, interviewAt, reviewerID)
 	if err != nil {
 		return nil, err
 	}
 
 	// Send automated status update email asynchronously to candidate's personal email
 	if app != nil {
-		go func(candidateName, candidateEmail, position, newStatus string) {
-			html, subject := email.BuildCareerStatusChangeEmail(candidateName, position, newStatus)
+		go func(candidateName, candidateEmail, position, newStatus string, interviewTime *time.Time) {
+			formattedInterview := ""
+			if interviewTime != nil {
+				formattedInterview = interviewTime.Format("Monday, January 2, 2006 at 3:04 PM")
+			}
+			html, subject := email.BuildCareerStatusChangeEmail(candidateName, position, newStatus, formattedInterview)
 			if html != "" {
 				if err := email.SendEmail(context.Background(), candidateEmail, subject, html); err != nil {
 					s.log.Warn().Err(err).Str("email", candidateEmail).Str("status", newStatus).Msg("careers: failed to send status change email")
@@ -163,7 +167,7 @@ func (s *Service) UpdateStatus(ctx context.Context, id, status string, notes *st
 					s.log.Info().Str("email", candidateEmail).Str("status", newStatus).Msg("careers: candidate status change email sent successfully")
 				}
 			}
-		}(app.FullName, app.Email, app.Position, app.ApplicationStatus)
+		}(app.FullName, app.Email, app.Position, app.ApplicationStatus, app.InterviewAt)
 	}
 
 	return app, nil
