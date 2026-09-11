@@ -28,6 +28,7 @@ type Application struct {
 	ReviewerNotes      *string    `json:"reviewer_notes,omitempty"`
 	ReviewedBy         *string    `json:"reviewed_by,omitempty"`
 	ReviewedAt         *time.Time `json:"reviewed_at,omitempty"`
+	InterviewAt        *time.Time `json:"interview_at,omitempty"`
 	CreatedAt          time.Time  `json:"created_at"`
 	UpdatedAt          time.Time  `json:"updated_at"`
 }
@@ -58,6 +59,7 @@ type CreateApplicationInput struct {
 type UpdateStatusInput struct {
 	ApplicationStatus string  `json:"application_status" validate:"required,oneof=NEW UNDER_REVIEW INTERVIEW_SCHEDULED ACCEPTED REJECTED"`
 	ReviewerNotes     *string `json:"reviewer_notes"`
+	InterviewAt       *string `json:"interview_at"`
 }
 
 type ListFilter struct {

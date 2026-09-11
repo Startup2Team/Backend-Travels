@@ -197,7 +197,7 @@ func BuildCareerApplicationReceivedEmail(name, position string) string {
     </div>
     <div class="content">
       <p class="welcome-text">Hello {{Name}},</p>
-      <p class="welcome-text">Thank you for submitting your application to join the team at <strong>Rides</strong>!</p>
+      <p class="welcome-text">Thank you for submitting your application to join the team at <strong>Travelis Rwanda Ltd</strong>!</p>
       
       <div class="info-box">
         <div class="info-title">Position Applied For:</div>
@@ -209,11 +209,11 @@ func BuildCareerApplicationReceivedEmail(name, position string) string {
       </p>
       <p class="welcome-text">
         Best regards,<br>
-        <strong>Rides Recruitment Team</strong>
+        <strong>Travelis Rwanda Recruitment Team</strong>
       </p>
     </div>
     <div class="footer">
-      &copy; {{Year}} Rides. All rights reserved.
+      &copy; {{Year}} Travelis Rwanda Ltd. All rights reserved.
     </div>
   </div>
 </body>
@@ -227,24 +227,28 @@ func BuildCareerApplicationReceivedEmail(name, position string) string {
 	return r.Replace(tpl)
 }
 
-func BuildCareerStatusChangeEmail(name, position, status string) (html string, subject string) {
+func BuildCareerStatusChangeEmail(name, position, status, interviewAt string) (html string, subject string) {
 	var headline, bodyText, bannerBg string
 	switch status {
 	case "ACCEPTED":
-		subject = fmt.Sprintf("Congratulations! Application Accepted — %s at Rides", position)
+		subject = fmt.Sprintf("Congratulations! Application Accepted — %s at Travelis Rwanda Ltd", position)
 		headline = "Application Accepted 🎉"
 		bannerBg = "#10b981"
-		bodyText = fmt.Sprintf("We are thrilled to inform you that your application for the <strong>%s</strong> position at Rides has been <strong>Accepted</strong>! Our team will contact you shortly with the official offer details and onboarding instructions.", position)
+		bodyText = fmt.Sprintf("We are thrilled to inform you that your application for the <strong>%s</strong> position at Travelis Rwanda Ltd has been <strong>Accepted</strong>! Our team will contact you shortly with the official offer details and onboarding instructions.", position)
 	case "INTERVIEW_SCHEDULED":
-		subject = fmt.Sprintf("Interview Invitation — %s at Rides", position)
+		subject = fmt.Sprintf("Interview Invitation — %s at Travelis Rwanda Ltd", position)
 		headline = "Interview Scheduled 📅"
 		bannerBg = "#2563eb"
-		bodyText = fmt.Sprintf("Great news! Your application for the <strong>%s</strong> position at Rides has advanced to the interview phase. Our HR team will reach out to schedule your interview session.", position)
+		if interviewAt != "" {
+			bodyText = fmt.Sprintf("Great news! Your application for the <strong>%s</strong> position at Travelis Rwanda Ltd has advanced to the interview phase.<br><br><div style='background: #eff6ff; border: 1px solid #bfdbfe; padding: 16px; border-radius: 12px; margin: 16px 0;'><strong style='color: #1e40af;'>Scheduled Interview Session:</strong><br><span style='font-size: 16px; font-weight: 700; color: #1e3a8a;'>📅 %s</span></div>Our HR team will reach out with session details.", position, interviewAt)
+		} else {
+			bodyText = fmt.Sprintf("Great news! Your application for the <strong>%s</strong> position at Travelis Rwanda Ltd has advanced to the interview phase. Our HR team will reach out to schedule your interview session.", position)
+		}
 	case "REJECTED":
-		subject = fmt.Sprintf("Application Status Update — %s at Rides", position)
+		subject = fmt.Sprintf("Application Status Update — %s at Travelis Rwanda Ltd", position)
 		headline = "Application Update"
 		bannerBg = "#6b7280"
-		bodyText = fmt.Sprintf("Thank you for taking the time to apply for the <strong>%s</strong> position at Rides. After careful consideration, we have decided to proceed with other candidates whose qualifications more closely match our current requirements. We sincerely appreciate your interest and wish you the best in your career search.", position)
+		bodyText = fmt.Sprintf("Thank you for taking the time to apply for the <strong>%s</strong> position at Travelis Rwanda Ltd. After careful consideration, we have decided to proceed with other candidates whose qualifications more closely match our current requirements. We sincerely appreciate your interest and wish you the best in your career search.", position)
 	default:
 		// No email sent for UNDER_REVIEW or unmapped status changes
 		return "", ""
@@ -273,11 +277,11 @@ func BuildCareerStatusChangeEmail(name, position, status string) (html string, s
       <p class="welcome-text">{{BodyText}}</p>
       <p class="welcome-text" style="margin-top: 32px;">
         Best regards,<br>
-        <strong>Rides Recruitment Team</strong>
+        <strong>Travelis Rwanda Recruitment Team</strong>
       </p>
     </div>
     <div class="footer">
-      &copy; {{Year}} Rides. All rights reserved.
+      &copy; {{Year}} Travelis Rwanda Ltd. All rights reserved.
     </div>
   </div>
 </body>

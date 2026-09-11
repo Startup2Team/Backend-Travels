@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	apperrors "github.com/workspace/ride-platform/pkg/errors"
@@ -108,7 +109,7 @@ func (r *Repository) List(ctx context.Context, filter ListFilter) ([]*Applicatio
 			project_url, project_body, github_url, linkedin_url, portfolio_url,
 			cv_url, available_from_start, heard_from, consent, source,
 			application_status, reviewer_notes, reviewed_by, reviewed_at,
-			created_at, updated_at
+			interview_at, created_at, updated_at
 		FROM career_applications
 		%s
 		ORDER BY created_at DESC
@@ -132,7 +133,7 @@ func (r *Repository) List(ctx context.Context, filter ListFilter) ([]*Applicatio
 			&app.ProjectURL, &app.ProjectBody, &app.GithubURL, &app.LinkedinURL, &app.PortfolioURL,
 			&app.CVURL, &app.AvailableFromStart, &app.HeardFrom, &app.Consent, &app.Source,
 			&app.ApplicationStatus, &app.ReviewerNotes, &app.ReviewedBy, &app.ReviewedAt,
-			&app.CreatedAt, &app.UpdatedAt,
+			&app.InterviewAt, &app.CreatedAt, &app.UpdatedAt,
 		); err != nil {
 			return nil, 0, fmt.Errorf("career repository scan: %w", err)
 		}
@@ -150,7 +151,7 @@ func (r *Repository) GetByID(ctx context.Context, id string) (*Application, erro
 			project_url, project_body, github_url, linkedin_url, portfolio_url,
 			cv_url, available_from_start, heard_from, consent, source,
 			application_status, reviewer_notes, reviewed_by, reviewed_at,
-			created_at, updated_at
+			interview_at, created_at, updated_at
 		FROM career_applications
 		WHERE id = $1
 	`
@@ -161,7 +162,7 @@ func (r *Repository) GetByID(ctx context.Context, id string) (*Application, erro
 		&app.ProjectURL, &app.ProjectBody, &app.GithubURL, &app.LinkedinURL, &app.PortfolioURL,
 		&app.CVURL, &app.AvailableFromStart, &app.HeardFrom, &app.Consent, &app.Source,
 		&app.ApplicationStatus, &app.ReviewerNotes, &app.ReviewedBy, &app.ReviewedAt,
-		&app.CreatedAt, &app.UpdatedAt,
+		&app.InterviewAt, &app.CreatedAt, &app.UpdatedAt,
 	)
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -172,31 +173,52 @@ func (r *Repository) GetByID(ctx context.Context, id string) (*Application, erro
 	return app, nil
 }
 
-func (r *Repository) UpdateStatus(ctx context.Context, id, status string, notes *string, reviewerID string) (*Application, error) {
+func (r *Repository) UpdateStatus(ctx context.Context, id, status string, notes *string, interviewAt *string, reviewerID string) (*Application, error) {
+	var reviewerUUID *string
+	reviewerID = strings.TrimSpace(reviewerID)
+	if reviewerID != "" {
+		if _, err := uuid.Parse(reviewerID); err == nil {
+			reviewerUUID = &reviewerID
+		}
+	}
+
+	var parsedInterviewAt *time.Time
+	if interviewAt != nil && strings.TrimSpace(*interviewAt) != "" {
+		s := strings.TrimSpace(*interviewAt)
+		if t, err := time.Parse(time.RFC3339, s); err == nil {
+			parsedInterviewAt = &t
+		} else if t, err := time.Parse("2006-01-02T15:04", s); err == nil {
+			parsedInterviewAt = &t
+		} else if t, err := time.Parse("2006-01-02 15:04:05", s); err == nil {
+			parsedInterviewAt = &t
+		}
+	}
+
 	query := `
 		UPDATE career_applications
 		SET application_status = $1,
 		    reviewer_notes = COALESCE($2, reviewer_notes),
 		    reviewed_by = $3,
 		    reviewed_at = NOW(),
+		    interview_at = COALESCE($4, interview_at),
 		    updated_at = NOW()
-		WHERE id = $4
+		WHERE id = $5
 		RETURNING
 			id, full_name, email, phone, city, work_right, status,
 			institution, graduation_year, position, technologies,
 			project_url, project_body, github_url, linkedin_url, portfolio_url,
 			cv_url, available_from_start, heard_from, consent, source,
 			application_status, reviewer_notes, reviewed_by, reviewed_at,
-			created_at, updated_at
+			interview_at, created_at, updated_at
 	`
 	app := &Application{}
-	err := r.db.QueryRow(ctx, query, status, notes, reviewerID, id).Scan(
+	err := r.db.QueryRow(ctx, query, status, notes, reviewerUUID, parsedInterviewAt, id).Scan(
 		&app.ID, &app.FullName, &app.Email, &app.Phone, &app.City, &app.WorkRight, &app.Status,
 		&app.Institution, &app.GraduationYear, &app.Position, &app.Technologies,
 		&app.ProjectURL, &app.ProjectBody, &app.GithubURL, &app.LinkedinURL, &app.PortfolioURL,
 		&app.CVURL, &app.AvailableFromStart, &app.HeardFrom, &app.Consent, &app.Source,
 		&app.ApplicationStatus, &app.ReviewerNotes, &app.ReviewedBy, &app.ReviewedAt,
-		&app.CreatedAt, &app.UpdatedAt,
+		&app.InterviewAt, &app.CreatedAt, &app.UpdatedAt,
 	)
 	if err != nil {
 		if err == pgx.ErrNoRows {

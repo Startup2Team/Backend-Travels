@@ -107,7 +107,7 @@ func (h *Handler) AdminUpdateStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	app, err := h.svc.UpdateStatus(r.Context(), id, input.ApplicationStatus, input.ReviewerNotes, reviewerID)
+	app, err := h.svc.UpdateStatus(r.Context(), id, input.ApplicationStatus, input.ReviewerNotes, input.InterviewAt, reviewerID)
 	if err != nil {
 		respond.Error(w, err)
 		return
